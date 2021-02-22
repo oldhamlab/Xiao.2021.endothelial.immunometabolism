@@ -1,5 +1,5 @@
 Package: Xiao.2021.endothelial.immunometabolism
-Title: What the Package Does (One Line, Title Case)
+Title: 2021 Xiao Endothelial Immunometabolic Phenotypes LC-MS Data
 Version: 0.0.0.9000
 Authors@R: 
     person(given = "William",
@@ -7,7 +7,9 @@ Authors@R:
            role = c("aut", "cre"),
            email = "wm.oldham@gmail.com",
            comment = c(ORCID = "0000-0003-3029-4866"))
-Description: What the package does (one paragraph).
+Description: This is a data package containing the raw peak intensity data and 
+    analytical code for processing the LC-MS data obtained from stable isotope
+    tracing experiments. 
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true

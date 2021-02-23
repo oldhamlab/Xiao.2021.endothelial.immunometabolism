@@ -1,6 +1,7 @@
 ---
-title: "analysis"
+title: "Glucose tracing in PAEC treated with TNFα and LPS"
 output: rmarkdown::html_vignette
+bibliography: references.bib
 vignette: >
   %\VignetteIndexEntry{analysis}
   %\VignetteEngine{knitr::rmarkdown}
@@ -9,6 +10,7 @@ vignette: >
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
+  out.width = "100%", 
   collapse = TRUE,
   comment = "#>"
 )
@@ -16,4 +18,169 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(Xiao.2021.endothelial.immunometabolism)
+library(mzrtools)
+library(dplyr)
+library(ggplot2)
 ```
+
+# Overview
+
+The objective of these experiment was to determine the intracellular distribution of glucose-derived carbons in downstream metabolic pathways. 
+
+# Methods
+
+## Sample Preparation
+
+At the end of TNFα or LPS incubation, endothelial cells were quickly washed with two volumes of ice-cold PBS and then lysed for 15 min in 80% methanol pre-cooled to -80 °C. [D~8~]-valine (Cambridge Isotope Laboratories, Tewksbury, MA) was added as an internal standard during metabolite extraction. Cells were harvested by scraping on dry ice and centrifuged at 21,000 ×*g* for 10 min at 4 °C to remove cell debris. The supernatants were collected and evaporated to dryness on an Integrated SpeedVac Vacuum System (Thermo Fisher Scientific; Waltham, MA) at 42 °C. The resulting pellets were resuspended in liquid chromatography-mass spectrometry (LC-MS)-grade water. Twenty microliters of sample were loaded in an autosampler vial for analysis. A parallel dish was included for each treatment condition, with cell counts used for normalization of metabolite ion intensities.
+
+## Mass Spectrometric Acquisition
+
+LC-MS analysis was performed on a Vanquish ultra-high performance liquid chromatography system coupled to a Q Exactive mass spectrometer (Thermo Fisher Scientific) that was equipped with an Ion Max source and HESI II probe using the protocol described previously [@RN2783; @RN157]. External mass calibration was performed every seven days. Metabolites were separated using a ZIC-pHILIC stationary phase (150 mm × 2.1 mm × 3.5 μm; Merck) with a guard column. Mobile phase A contained 20 mM ammonium carbonate and 0.1% ammonium hydroxide. Mobile phase B was acetonitrile. The injection volume was 2.5 μL, the mobile phase flow rate was 100 μL/min, the column compartment temperature was set at 25 °C, and the autosampler compartment temperature was set at 4 °C. The mobile phase gradient (%B) was 0 min, 80%; 20 min, 20%; 20.5 min, 80%; 28 min, 80%; and 42 min, stop. The column effluent was introduced into the mass spectrometer with the following ionization source settings: sheath gas 40, auxiliary gas 15, sweep gas 1, spray voltage +3.0 or -3.1 kV, capillary temperature 275 °C, S-lens RF level 40, and probe temperature 350 °C. The mass spectrometer was operated in polarity-switching full scan mode from 70-1000 m/*z*. Resolution was set to 70,000, and the AGC target was 1×10^6^ ions. Data were acquired and analyzed using TraceFinder software (Thermo) with peak identifications based on an in-house library of authentic metabolite standards previously analyzed using this method. Metabolomic data are expressed as the ratio of peak areas of the target metabolite to the internal standard normalized to cell number determined in a parallel experiment. 
+
+## [U-^13^C~6~]-Glucose Isotope Tracing
+One hundred fifty-thousand cells were seeded into each well of a 6-well plate and grown to confluence in complete EBM-2 medium containing 5.5 mM glucose. On the day of labeling, cells were washed with glucose-free endothelial cell growth medium (Cell Biologicals, Chicago, IL) once and labeled in this medium supplemented with 5.5 mM [U-^13^C~6~]-Glucose (Cambridge Isotope Laboratories, Tewksbury, MA) in the presence or absence of TNFα or LPS stimulation for 24 h. Metabolites were extracted and analyzed by LC-MS as described above with the following modifications. To increase sensitivity for specific metabolites of interest and their isotopes, the mass spectrometer was operated in selected ion monitoring mode using an m/*z* window of 9 centered on the range of isotopes for a given molecule. Raw peak areas were corrected for quadrupole bias [@RN1051], and the resulting mass isotopomer distributions (MIDs) were corrected for natural isotope abundance using a custom R package (`mzrtools`) encoding the method of @RN551.
+
+# Analysis
+
+## Data Import
+
+```{r}
+files <- 
+  list.files(
+    system.file(
+      "extdata", 
+      package = "Xiao.2021.endothelial.immunometabolism"
+    ), 
+    pattern = "\\.xlsx", 
+    full.names = TRUE
+  ) %>% 
+  rlang::set_names(stringr::str_extract(basename(.), ".*(?=\\.xlsx)"))
+
+df <- 
+  purrr::map_dfr(
+    files, 
+    readxl::read_excel, 
+    sheet = 2, 
+    na = "N/F", 
+    .id = "experiment"
+  ) %>% 
+  select(
+    experiment, 
+    filename = 'Raw File Name', 
+    id = 'Sample ID', 
+    ion = 'Compound Name', 
+    area = 'Peak Area'
+  ) %>% 
+  filter(id != "water") %>% 
+  tidyr::separate(id, into = c("replicate", "label", "treatment"), sep = "-") %>% 
+  tidyr::separate(ion, into = c("metabolite", "isotope"), sep = "_| ") %>% 
+  tidyr::separate(experiment, into = c("date", "mode", NA), sep = "_") %>% 
+  filter(label == "glc6") %>% 
+  mutate(treatment = factor(treatment, levels = c("ctl", "tnf", "lps"))) %>% 
+  select(mode, date, filename, replicate, treatment, metabolite, isotope, area) %>% 
+  arrange(mode, metabolite, replicate, treatment)
+df
+```
+
+## Calculate correction matrices
+
+```{r correction-matrix}
+isotope_library <- 
+  tibble::tribble(
+    ~ metabolite, ~ formula, ~ polarity, 
+    "2HG", "C5H8O5", "negative", 
+    "2OG", "C5H6O5", "negative", 
+    "alanine", "C3H7NO2", "negative", 
+    "aspartate", "C4H7NO4", "negative", 
+    "citrate", "C6H8O7", "negative", 
+    "glutamate", "C5H9NO4", "negative", 
+    "glutamine", "C5H10N2O3", "negative",
+    "lactate", "C3H6O3", "negative", 
+    "malate", "C4H6O5", "negative", 
+    "pyruvate", "C3H4O3", "negative", 
+    "serine", "C3H7NO3", "negative", 
+    "succinate", "C4H6O4", "negative", 
+    "3PG", "C3H7O7P", "negative", 
+    "aconitate", "C6H6O6", "negative", 
+    "DHAP", "C3H7O6P", "negative", 
+    "FBP", "C6H14O12P2", "negative", 
+    "G1P", "C6H13O9P", "negative", 
+    "G3P", "C3H9O6P", "negative", 
+    "G6P", "C6H13O9P", "negative", 
+    "GAP", "C3H7O6P", "negative", 
+    "PEP", "C3H5O6P", "negative", 
+    "R5P", "C5H11O8P", "negative"
+  )
+
+correction_matrices <- 
+  isotope_library %>% 
+  mutate(
+    matrix = purrr::map2(formula, polarity, mz_iso_quant), 
+    matrix = purrr::map(matrix, purrr::pluck, "prob_matrix")
+  )
+```
+
+## Correct for natural isotope abundance
+
+MIDs are calculated from the peak areas corrected for quadrupole bias for each metabolite within each run. The correction matrices are are then used to adjust experiment MIDs for the natural abundance of ^13^C. 
+
+```{r natural-abundance-correction}
+mmult <- function(m, df) {
+  mid <- df$mid
+  if (nrow(m) > length(mid)) {
+    m <- m[1:length(mid), 1:length(mid)]
+  }
+  mid_corr <- mz_iso_correct(m, mid)
+  bind_cols(df, mid_corr = mid_corr)
+}
+
+cf <- mutate(correction_factors, mode = "sim")
+
+mid <- 
+  df %>% 
+  left_join(cf, by = c("metabolite", "isotope" = "M", "mode")) %>% 
+  mutate(
+    cf = tidyr::replace_na(cf, 1), 
+    area_corr = area * cf
+  ) %>% 
+  group_by(mode, date, filename, replicate, treatment, metabolite) %>% 
+  mutate(mid = area_corr / sum(area_corr, na.rm = TRUE)) %>% 
+  filter(!(metabolite %in% c("sedoheptulose", "palmitate"))) %>% 
+  filter(!is.nan(mid)) %>%  
+  tidyr::nest() %>% 
+  left_join(correction_matrices, by = "metabolite") %>%
+  mutate(mid_corr = purrr::map2(matrix, data, mmult)) %>%
+  tidyr::unnest(c(mid_corr)) %>% 
+  select(mode:metabolite, isotope:mid_corr)
+mid
+
+usethis::use_data(mid, overwrite = TRUE)
+```
+
+## Plots
+
+# Plot MIDs
+
+```{r}
+filter(mid, isotope != "M6" & mode == "sim") %>% 
+  ggplot(aes(x = isotope, y = mid_corr, fill = treatment)) +
+  facet_wrap(~ metabolite) +
+  stat_summary(
+    geom = "col",
+    position = "dodge",
+    fun = "mean"
+  ) +
+  stat_summary(
+    geom = "errorbar", 
+    position = position_dodge(width = 0.9), 
+    color = "black", 
+    fun.data = "mean_se", 
+    width = 0.3
+  ) +
+  # stat_summary(geom = "pointrange", fun.data = "mean_se", size = 0.01)
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  NULL
+```
+
+# References

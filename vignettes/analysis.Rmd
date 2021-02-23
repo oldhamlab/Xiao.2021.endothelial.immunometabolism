@@ -1,6 +1,8 @@
 ---
-title: "Glucose tracing in PAEC treated with TNFα and LPS"
-output: rmarkdown::html_vignette
+title: "Endothelial Cell Glucose Tracing"
+output: 
+  rmarkdown::html_document:
+    df_print: paged
 bibliography: references.bib
 vignette: >
   %\VignetteIndexEntry{analysis}
@@ -10,17 +12,20 @@ vignette: >
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  out.width = "100%", 
+  out.width = "100%",
+  message = FALSE, 
   collapse = TRUE,
   comment = "#>"
 )
 ```
 
 ```{r setup}
-library(Xiao.2021.endothelial.immunometabolism)
-library(mzrtools)
-library(dplyr)
-library(ggplot2)
+suppressPackageStartupMessages({
+  library(Xiao.2021.endothelial.immunometabolism)
+  library(mzrtools)
+  library(dplyr)
+  library(ggplot2)
+})
 ```
 
 # Overview
@@ -124,7 +129,7 @@ correction_matrices <-
 
 MIDs are calculated from the peak areas corrected for quadrupole bias for each metabolite within each run. The correction matrices are are then used to adjust experiment MIDs for the natural abundance of ^13^C. 
 
-```{r natural-abundance-correction}
+```{r}
 mmult <- function(m, df) {
   mid <- df$mid
   if (nrow(m) > length(mid)) {
@@ -153,13 +158,14 @@ mid <-
   tidyr::unnest(c(mid_corr)) %>% 
   select(mode:metabolite, isotope:mid_corr)
 mid
+```
 
+
+```{r}
 usethis::use_data(mid, overwrite = TRUE)
 ```
 
 ## Plots
-
-# Plot MIDs
 
 ```{r}
 filter(mid, isotope != "M6" & mode == "sim") %>% 
@@ -178,7 +184,7 @@ filter(mid, isotope != "M6" & mode == "sim") %>%
     width = 0.3
   ) +
   # stat_summary(geom = "pointrange", fun.data = "mean_se", size = 0.01)
-  theme_minimal() +
+  theme_minimal(base_size = 12) +
   theme(legend.position = "bottom") +
   NULL
 ```

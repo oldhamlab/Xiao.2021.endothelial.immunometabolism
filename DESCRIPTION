@@ -18,5 +18,8 @@ RoxygenNote: 7.1.1
 URL: https://github.com/oldhamlab/Xiao.2021.endothelial.immunometabolism
 BugReports: https://github.com/oldhamlab/Xiao.2021.endothelial.immunometabolism/issues
 Suggests: 
-    spelling
+    spelling,
+    knitr,
+    rmarkdown
 Language: en-US
+VignetteBuilder: knitr
